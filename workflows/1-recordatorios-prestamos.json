@@ -1,0 +1,376 @@
+{
+  "id": "bibRecordatorios",
+  "name": "Biblioteca · Recordatorios de préstamos",
+  "active": false,
+  "nodes": [
+    {
+      "id": "3f1dfc24-8ad4-4b89-a722-53d7ea395bd1",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        20
+      ],
+      "parameters": {
+        "content": "## Recordatorios de préstamos\nCada día a las 9:00 envía **un correo por usuario** con sus préstamos **vencidos** y los que **vencen pronto** (`diasAntesDeVencer`), indicando si ya se pueden renovar.\n\n- Si un correo falla, aparece en **No enviados** y se reintenta en la siguiente ejecución.\n- No repite avisos: «vence pronto» se envía una vez por fecha límite; «vencido», una vez y luego cada `repetirVencidosCadaDias` días. *(Esta memoria solo se guarda con el flujo activado; al probar desde el editor siempre salen todos.)*\n- **Modo de pruebas:** mientras `correoPruebas` tenga una dirección, todos los correos llegan ahí (el asunto dice a quién iban). Déjalo vacío para enviarlos a los usuarios.\n- Edita los valores en **Configuración**.",
+        "height": 220,
+        "width": 1340,
+        "color": 7
+      }
+    },
+    {
+      "id": "8abb8941-dcdd-4303-a8bf-869acd5bc842",
+      "name": "Cada día a las 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0861840c-f685-4488-ad71-f47d3346d045",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d291473a-eaaa-4333-a469-2729a200f505",
+              "name": "apiUrl",
+              "value": "http://localhost:8080/api",
+              "type": "string"
+            },
+            {
+              "id": "e26ee99b-9d25-4fdd-acc2-0ea9b272c4af",
+              "name": "nombreBiblioteca",
+              "value": "Biblioteca",
+              "type": "string"
+            },
+            {
+              "id": "9990bc58-a96e-4665-a091-b46f0682448c",
+              "name": "correoRemitente",
+              "value": "biblioteca@example.com",
+              "type": "string"
+            },
+            {
+              "id": "1d804006-367f-43b9-afc5-a83dd2beda59",
+              "name": "correoPruebas",
+              "value": "tu-correo@example.com",
+              "type": "string"
+            },
+            {
+              "id": "b0c3a13c-bf68-4bfa-ac7d-1892a11c4fb0",
+              "name": "diasAntesDeVencer",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "9972dbcc-fea8-48a0-a1b6-f84e58c2da92",
+              "name": "repetirVencidosCadaDias",
+              "value": 7,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "aaba97be-d5bf-4d78-ab60-198e84e25482",
+      "name": "Usuarios",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "parameters": {
+        "url": "={{ $('Configuración').first().json.apiUrl }}/members",
+        "options": {}
+      }
+    },
+    {
+      "id": "31ff25f4-64cd-4082-a1e1-600188899bfb",
+      "name": "Préstamos vencidos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "url": "={{ $('Configuración').first().json.apiUrl }}/loans",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "OVERDUE"
+            },
+            {
+              "name": "size",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.page + 1 >= $response.body.totalPages }}",
+              "limitPagesFetched": true,
+              "maxRequests": 100
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "07c81dde-cca7-4997-a943-af79b6c773be",
+      "name": "Préstamos en plazo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "url": "={{ $('Configuración').first().json.apiUrl }}/loans",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "ACTIVE"
+            },
+            {
+              "name": "sort",
+              "value": "dueDate"
+            },
+            {
+              "name": "direction",
+              "value": "asc"
+            },
+            {
+              "name": "size",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.page + 1 >= $response.body.totalPages || ($response.body.content.at(-1)?.dueDate ?? '') > $today.plus({ days: $('Configuración').first().json.diasAntesDeVencer }).toISODate() }}",
+              "limitPagesFetched": true,
+              "maxRequests": 100
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "abed46d3-cd10-4710-a6f1-894cf9260b46",
+      "name": "Preparar avisos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Cruza los préstamos con los correos de los usuarios y prepara UN correo por usuario\r\n// con todo lo que tiene pendiente: préstamos vencidos y préstamos que vencen pronto.\r\n//\r\n// Para no repetir avisos cada día, el flujo recuerda lo que ya envió (datos estáticos del\r\n// flujo; solo se guardan cuando se ejecuta activado, no en las pruebas desde el editor):\r\n//   - «vence pronto»: un aviso por préstamo y fecha límite (si se renueva, se vuelve a avisar)\r\n//   - «vencido»: un aviso y luego otro cada `repetirVencidosCadaDias` días mientras siga sin devolver\r\nconst cfg = $('Configuración').first().json;\r\nconst memoria = $getWorkflowStaticData('global');\r\nmemoria.porVencer ??= {}; // id del préstamo -> fecha límite de la que ya se avisó\r\nmemoria.vencidos ??= {};  // id del préstamo -> día del último aviso (AAAA-MM-DD)\r\n\r\n// --- Plantilla común de los correos (la misma en los tres flujos que envían correo) ----------\r\n// Colores de la web de la biblioteca. Todo va con estilos en línea y tablas: es lo único que\r\n// respetan por igual Gmail, Outlook y los clientes de móvil.\r\nconst COLOR = {\r\n  marca: '#4f46e5', marca2: '#7c3aed', marcaSuave: '#eef2ff',\r\n  texto: '#0f172a', suave: '#64748b', borde: '#e2e8f0', fondo: '#f1f5f9', tarjeta: '#ffffff', sutil: '#f8fafc',\r\n  peligro: '#dc2626', peligroSuave: '#fef2f2', peligroBorde: '#fecaca',\r\n  aviso: '#b45309', avisoSuave: '#fffbeb', avisoBorde: '#fde68a',\r\n  exito: '#047857', exitoSuave: '#ecfdf5', exitoBorde: '#a7f3d0',\r\n};\r\n// [texto, fondo, borde] de cada tono; ACENTO es el color vivo de las líneas laterales.\r\nconst ACENTO = { peligro: '#ef4444', aviso: '#f59e0b', exito: '#10b981', marca: COLOR.marca, neutro: '#94a3b8' };\r\nconst TONOS = {\r\n  peligro: [COLOR.peligro, COLOR.peligroSuave, COLOR.peligroBorde],\r\n  aviso: [COLOR.aviso, COLOR.avisoSuave, COLOR.avisoBorde],\r\n  exito: [COLOR.exito, COLOR.exitoSuave, COLOR.exitoBorde],\r\n  marca: [COLOR.marca, COLOR.marcaSuave, '#c7d2fe'],\r\n  neutro: [COLOR.suave, COLOR.sutil, COLOR.borde],\r\n};\r\nconst FUENTE = \"-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\";\r\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\r\n\r\n/** Etiqueta redondeada de estado («Vencido hace 6 días»). */\r\nconst pastilla = (texto, tono = 'neutro') => {\r\n  const [color, fondo, borde] = TONOS[tono];\r\n  return `<span style=\"display:inline-block;padding:3px 10px;border-radius:999px;background:${fondo};border:1px solid ${borde};color:${color};font-size:12px;font-weight:600;line-height:18px;white-space:nowrap\">${esc(texto)}</span>`;\r\n};\r\n\r\n/** Recuadro de color para mensajes importantes. */\r\nconst recuadro = (html, tono = 'marca', margen = '20px 0 0') => {\r\n  const [color, fondo, borde] = TONOS[tono];\r\n  return `<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin:${margen}\"><tr>\r\n<td style=\"background:${fondo};border:1px solid ${borde};border-left:4px solid ${ACENTO[tono]};border-radius:8px;padding:12px 16px;font-size:14px;line-height:21px;color:${COLOR.texto}\">${html}</td></tr></table>`;\r\n};\r\n\r\n/** Título de sección dentro del cuerpo, con contador opcional. */\r\nconst seccion = (titulo, cantidad) => `<h2 style=\"margin:28px 0 10px;font-size:15px;line-height:22px;font-weight:700;color:${COLOR.texto}\">${esc(titulo)}${\r\n  cantidad === undefined ? '' : ` <span style=\"display:inline-block;margin-left:4px;padding:0 8px;border-radius:999px;background:${COLOR.marcaSuave};color:${COLOR.marca};font-size:12px;line-height:20px;vertical-align:1px\">${cantidad}</span>`}</h2>`;\r\n\r\n/**\r\n * Documento completo del correo: cabecera con degradado, tarjeta blanca y pie.\r\n * @param o.etiqueta    texto pequeño sobre el título («RECORDATORIO»)\r\n * @param o.vistaPrevia texto que muestran los clientes de correo junto al asunto\r\n * @param o.cabecera    color de la cabecera: 'marca' (índigo), 'peligro' (rojo) o 'exito' (verde)\r\n */\r\nfunction correoHtml({ biblioteca, etiqueta, titulo, subtitulo = '', vistaPrevia = '', cuerpo, pie, cabecera = 'marca' }) {\r\n  const [desde, hasta, claro] = {\r\n    marca: [COLOR.marca, COLOR.marca2, '#c7d2fe'],\r\n    peligro: ['#dc2626', '#9f1239', '#fecaca'],\r\n    exito: ['#059669', '#0f766e', '#a7f3d0'],\r\n  }[cabecera];\r\n  return `<!doctype html>\r\n<html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\r\n<meta name=\"color-scheme\" content=\"light\"><meta name=\"supported-color-schemes\" content=\"light\"><title>${esc(titulo)}</title></head>\r\n<body style=\"margin:0;padding:0;background:${COLOR.fondo};-webkit-text-size-adjust:100%\">\r\n<div style=\"display:none;max-height:0;overflow:hidden;opacity:0;color:${COLOR.fondo}\">${esc(vistaPrevia)}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>\r\n<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"background:${COLOR.fondo}\"><tr><td align=\"center\" style=\"padding:24px 12px\">\r\n<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"max-width:600px;font-family:${FUENTE}\">\r\n<tr><td style=\"background:${desde};background-image:linear-gradient(135deg,${desde},${hasta});border-radius:14px 14px 0 0;padding:24px 28px\">\r\n  <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\"><tr>\r\n    <td style=\"width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.18);text-align:center;font-size:19px;line-height:36px\">📖</td>\r\n    <td style=\"padding-left:12px;font-size:15px;font-weight:700;color:#ffffff;letter-spacing:0.2px\">${esc(biblioteca)}</td>\r\n  </tr></table>\r\n  <div style=\"margin-top:20px;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${claro}\">${esc(etiqueta)}</div>\r\n  <div style=\"margin-top:4px;font-size:24px;line-height:31px;font-weight:700;color:#ffffff\">${esc(titulo)}</div>\r\n  ${subtitulo ? `<div style=\"margin-top:6px;font-size:14px;line-height:20px;color:#ffffff;opacity:0.9\">${esc(subtitulo)}</div>` : ''}\r\n</td></tr>\r\n<tr><td style=\"background:${COLOR.tarjeta};border:1px solid ${COLOR.borde};border-top:0;border-radius:0 0 14px 14px;padding:28px;font-size:15px;line-height:23px;color:${COLOR.texto}\">\r\n${cuerpo}\r\n</td></tr>\r\n<tr><td style=\"padding:18px 28px 0;text-align:center;font-size:12px;line-height:18px;color:${COLOR.suave}\">${pie}</td></tr>\r\n</table>\r\n</td></tr></table>\r\n</body></html>`;\r\n}\r\n// --- Fin de la plantilla común ----------------------------------------------------------------\r\n\r\nconst hoy = $today.toISODate(); // AAAA-MM-DD en la zona horaria del flujo\r\nconst fecha = (iso) => DateTime.fromISO(iso).toFormat('dd/MM/yyyy');\r\nconst diasEntre = (desde, hasta) => Math.round(DateTime.fromISO(hasta).diff(DateTime.fromISO(desde), 'days').days);\r\nconst diasHasta = (iso) => diasEntre(hoy, iso); // negativo si ya pasó\r\nconst plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;\r\n\r\nconst usuarios = new Map($('Usuarios').all().map((i) => [i.json.id, i.json]));\r\nconst vencidos = $('Préstamos vencidos').all().flatMap((i) => i.json.content ?? []);\r\nconst enPlazo = $('Préstamos en plazo').all().flatMap((i) => i.json.content ?? []);\r\n\r\n// Olvida los préstamos que ya se devolvieron para que la memoria no crezca sin límite.\r\nconst vigentes = new Set([...vencidos, ...enPlazo].map((p) => String(p.id)));\r\nfor (const lista of [memoria.porVencer, memoria.vencidos]) {\r\n  for (const id of Object.keys(lista)) if (!vigentes.has(id)) delete lista[id];\r\n}\r\n\r\n// Préstamos que toca avisar hoy, agrupados por usuario.\r\nconst porUsuario = new Map();\r\nconst anotar = (p, tipo) => {\r\n  if (!porUsuario.has(p.memberId)) porUsuario.set(p.memberId, { vencidos: [], porVencer: [] });\r\n  porUsuario.get(p.memberId)[tipo].push(p);\r\n};\r\n\r\nfor (const p of vencidos) {\r\n  const ultimo = memoria.vencidos[p.id];\r\n  if (!ultimo || diasEntre(ultimo, hoy) >= cfg.repetirVencidosCadaDias) anotar(p, 'vencidos');\r\n}\r\nfor (const p of enPlazo) {\r\n  const quedan = diasHasta(p.dueDate);\r\n  if (quedan <= cfg.diasAntesDeVencer && memoria.porVencer[p.id] !== p.dueDate) anotar(p, 'porVencer');\r\n}\r\n\r\nconst cuando = (dias) => (dias === 0 ? 'hoy' : dias === 1 ? 'mañana' : `en ${dias} días`);\r\nconst hace = (dias) => (dias === 1 ? 'ayer' : `hace ${dias} días`);\r\nconst mayuscula = (s) => s[0].toUpperCase() + s.slice(1);\r\n\r\n/** Tarjeta de un préstamo: título, etiqueta de estado, fecha límite y una nota opcional. */\r\nconst tarjeta = (p, { tono, estado, nota }) => `<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin:0 0 12px\"><tr>\r\n<td style=\"border:1px solid ${COLOR.borde};border-left:4px solid ${ACENTO[tono]};border-radius:10px;padding:14px 16px;background:${COLOR.tarjeta}\">\r\n<div style=\"font-size:16px;line-height:22px;font-weight:700;color:${COLOR.texto}\">${esc(p.bookTitle)}</div>\r\n<div style=\"margin-top:8px;line-height:26px\">${pastilla(estado, tono)}<span style=\"padding-left:8px;font-size:13px;color:${COLOR.suave};white-space:nowrap\">Fecha límite: ${fecha(p.dueDate)}</span></div>\r\n${nota ? `<div style=\"margin-top:8px;font-size:13px;line-height:19px;color:${nota.color}\">${nota.html}</div>` : ''}\r\n</td></tr></table>`;\r\n\r\nconst correos = [];\r\nfor (const [memberId, { vencidos: v, porVencer: pv }] of porUsuario) {\r\n  const usuario = usuarios.get(memberId);\r\n  if (!usuario?.email) continue; // sin correo no hay a quién avisar\r\n\r\n  const titulo = v.length\r\n    ? `Tienes ${plural(v.length, 'préstamo vencido', 'préstamos vencidos')}`\r\n    : pv.length === 1 ? 'Tu préstamo vence pronto' : `Tienes ${pv.length} préstamos que vencen pronto`;\r\n  const asunto = v.length || pv.length > 1 ? titulo : `«${pv[0].bookTitle}» vence ${cuando(diasHasta(pv[0].dueDate))}`;\r\n\r\n  // --- HTML ---\r\n  const tarjetasVencidos = v.map((p) => tarjeta(p, { tono: 'peligro', estado: mayuscula(`vencido ${hace(-diasHasta(p.dueDate))}`) }));\r\n  const tarjetasPorVencer = pv.map((p) => {\r\n    const renovable = p.renewableFrom && p.renewableFrom <= hoy;\r\n    return tarjeta(p, {\r\n      tono: 'aviso',\r\n      estado: mayuscula(`vence ${cuando(diasHasta(p.dueDate))}`),\r\n      nota: renovable\r\n        ? { color: COLOR.exito, html: '&#10003; Ya se puede renovar si lo necesitas más tiempo.' }\r\n        : { color: COLOR.suave, html: `Podrás renovarlo a partir del ${fecha(p.renewableFrom)}.` },\r\n    });\r\n  });\r\n\r\n  const cuerpo = [`<p style=\"margin:0 0 16px\">Hola, <strong>${esc(usuario.name)}</strong>:</p>`];\r\n  if (v.length) {\r\n    cuerpo.push(\r\n      `<p style=\"margin:0 0 16px\">${v.length === 1 ? 'Este libro ya debería haberse devuelto' : 'Estos libros ya deberían haberse devuelto'}. Por favor, ${v.length === 1 ? 'devuélvelo' : 'devuélvelos'} cuanto antes.</p>`,\r\n      ...tarjetasVencidos,\r\n      recuadro('Mientras tengas préstamos vencidos <strong>no podrás llevarte otros libros</strong>.', 'peligro'),\r\n    );\r\n  }\r\n  if (pv.length) {\r\n    if (v.length) cuerpo.push(seccion(pv.length === 1 ? 'Además, vence pronto' : 'Además, vencen pronto', pv.length));\r\n    else cuerpo.push(`<p style=\"margin:0 0 16px\">${pv.length === 1 ? 'Te recordamos que este préstamo vence pronto' : 'Te recordamos que estos préstamos vencen pronto'}:</p>`);\r\n    cuerpo.push(...tarjetasPorVencer);\r\n  }\r\n  cuerpo.push(`<p style=\"margin:24px 0 0\">Un saludo,<br><strong>${esc(cfg.nombreBiblioteca)}</strong></p>`);\r\n\r\n  const primero = v[0] ?? pv[0];\r\n  const vistaPrevia = v.length\r\n    ? `«${primero.bookTitle}» venció el ${fecha(primero.dueDate)}. Devuélvelo cuanto antes.`\r\n    : `«${primero.bookTitle}» vence el ${fecha(primero.dueDate)}.`;\r\n  const html = correoHtml({\r\n    biblioteca: cfg.nombreBiblioteca,\r\n    etiqueta: 'Recordatorio de préstamos',\r\n    titulo,\r\n    vistaPrevia,\r\n    cuerpo: cuerpo.join('\\n'),\r\n    pie: `Mensaje automático de ${esc(cfg.nombreBiblioteca)}.<br>Si ya devolviste ${v.length + pv.length === 1 ? 'el libro' : 'los libros'}, no tengas en cuenta este aviso.`,\r\n  });\r\n\r\n  // --- Texto plano (clientes que no muestran HTML) ---\r\n  const texto = [`Hola, ${usuario.name}:`, ''];\r\n  if (v.length) {\r\n    texto.push(v.length === 1 ? 'Este libro ya debería haberse devuelto:' : 'Estos libros ya deberían haberse devuelto:',\r\n      ...v.map((p) => `- «${p.bookTitle}»: venció el ${fecha(p.dueDate)} (${hace(-diasHasta(p.dueDate))}).`), '',\r\n      `Por favor, ${v.length === 1 ? 'devuélvelo' : 'devuélvelos'} cuanto antes. Mientras tengas préstamos vencidos no podrás llevarte otros libros.`, '');\r\n  }\r\n  if (pv.length) {\r\n    const frase = pv.length === 1 ? 'este préstamo vence pronto:' : 'estos préstamos vencen pronto:';\r\n    texto.push(v.length ? `Además, ${frase}` : mayuscula(frase),\r\n      ...pv.map((p) => {\r\n        const renovar = p.renewableFrom && p.renewableFrom <= hoy\r\n          ? 'Ya se puede renovar si lo necesitas más tiempo.' : `Podrás renovarlo a partir del ${fecha(p.renewableFrom)}.`;\r\n        return `- «${p.bookTitle}»: vence ${cuando(diasHasta(p.dueDate))}, el ${fecha(p.dueDate)}. ${renovar}`;\r\n      }), '');\r\n  }\r\n  texto.push('Un saludo,', cfg.nombreBiblioteca);\r\n\r\n  // Modo de pruebas: todo llega a `correoPruebas` y el asunto indica a quién iba dirigido.\r\n  const enPruebas = Boolean(cfg.correoPruebas);\r\n  correos.push({\r\n    json: {\r\n      para: enPruebas ? cfg.correoPruebas : usuario.email,\r\n      asunto: enPruebas ? `[PRUEBA para ${usuario.email}] ${asunto}` : asunto,\r\n      html,\r\n      texto: texto.join('\\n'),\r\n      usuario: usuario.name,\r\n      correoUsuario: usuario.email,\r\n      avisos: [\r\n        ...v.map((p) => ({ prestamo: p.id, tipo: 'vencido', libro: p.bookTitle, vence: p.dueDate })),\r\n        ...pv.map((p) => ({ prestamo: p.id, tipo: 'porVencer', libro: p.bookTitle, vence: p.dueDate })),\r\n      ],\r\n    },\r\n  });\r\n}\r\n\r\nreturn correos;\r\n"
+      }
+    },
+    {
+      "id": "b50c24d1-f6b2-46b3-a6c7-6a683b9db5ba",
+      "name": "Enviar correo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1320,
+        300
+      ],
+      "webhookId": "b5a269e9-4645-4003-ac7f-4e30b546a21b",
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "smtp": {
+          "id": "bibSmtpCorreo001",
+          "name": "SMTP Biblioteca"
+        }
+      },
+      "parameters": {
+        "fromEmail": "={{ $('Configuración').first().json.nombreBiblioteca }} <{{ $('Configuración').first().json.correoRemitente }}>",
+        "toEmail": "={{ $json.para }}",
+        "subject": "={{ $json.asunto }}",
+        "emailFormat": "both",
+        "text": "={{ $json.texto }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "353e46ce-c5b0-4592-a9f0-6c2922ad1605",
+      "name": "Registrar envíos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Apunta en la memoria del flujo los avisos enviados, para no repetirlos en la próxima ejecución.\n// Los correos que fallan salen por la otra rama («No enviados») y, como no se apuntan aquí,\n// se vuelven a intentar en la siguiente ejecución.\nconst memoria = $getWorkflowStaticData('global');\nmemoria.porVencer ??= {};\nmemoria.vencidos ??= {};\nconst hoy = $today.toISODate();\n\nreturn $input.all().map((_, i) => {\n  const correo = $('Preparar avisos').itemMatching(i).json;\n  for (const aviso of correo.avisos) {\n    if (aviso.tipo === 'vencido') memoria.vencidos[aviso.prestamo] = hoy;\n    else memoria.porVencer[aviso.prestamo] = aviso.vence;\n  }\n  return { json: { usuario: correo.usuario, para: correo.para, asunto: correo.asunto, avisos: correo.avisos.length } };\n});\n"
+      }
+    },
+    {
+      "id": "762159fa-6daf-4e29-a1d6-70a1d4b9dcb7",
+      "name": "No enviados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Correos que el servidor SMTP no aceptó. No se apuntan como enviados, así que se reintentan\n// en la próxima ejecución. Revisa aquí el motivo (credenciales, dirección inexistente...).\nreturn $input.all().map((item, i) => {\n  const correo = $('Preparar avisos').itemMatching(i).json;\n  const error = item.json.error;\n  return {\n    json: {\n      usuario: correo.usuario,\n      para: correo.para,\n      asunto: correo.asunto,\n      motivo: error?.message ?? (typeof error === 'string' ? error : JSON.stringify(item.json)),\n    },\n  };\n});\n"
+      }
+    }
+  ],
+  "connections": {
+    "Cada día a las 9:00": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Usuarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Usuarios": {
+      "main": [
+        [
+          {
+            "node": "Préstamos vencidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préstamos vencidos": {
+      "main": [
+        [
+          {
+            "node": "Préstamos en plazo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préstamos en plazo": {
+      "main": [
+        [
+          {
+            "node": "Preparar avisos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar avisos": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo": {
+      "main": [
+        [
+          {
+            "node": "Registrar envíos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No enviados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota",
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,208 @@
+{
+  "id": "bibAvisoDeCaida1",
+  "name": "Biblioteca · Aviso si el servidor no responde",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1a13aede-cec2-4373-a20c-7d8c4762c193",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        40
+      ],
+      "parameters": {
+        "content": "## Aviso si el servidor no responde\nCada 5 minutos consulta `/actuator/health` del backend. Si falla `fallosParaAvisar` veces seguidas, envía **un** correo a `correoBibliotecario`; cuando vuelve a funcionar, envía otro con el tiempo que estuvo caído.\n\nNecesita estar **activado** para recordar el estado entre comprobaciones. Edita los valores en **Configuración**.",
+        "height": 200,
+        "width": 1120,
+        "color": 7
+      }
+    },
+    {
+      "id": "354323b1-6e76-4aa7-affa-5b02da075a69",
+      "name": "Cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "06f2539e-affa-4e3e-a461-6f59c8464fdd",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0a4d225a-e0b2-462b-a3f0-a2dbf8e4f8d6",
+              "name": "urlSalud",
+              "value": "http://localhost:8080/actuator/health",
+              "type": "string"
+            },
+            {
+              "id": "e26ee99b-9d25-4fdd-acc2-0ea9b272c4af",
+              "name": "nombreBiblioteca",
+              "value": "Biblioteca",
+              "type": "string"
+            },
+            {
+              "id": "9990bc58-a96e-4665-a091-b46f0682448c",
+              "name": "correoRemitente",
+              "value": "biblioteca@example.com",
+              "type": "string"
+            },
+            {
+              "id": "f5f8a98b-8070-4b9d-a4a7-3f2246891666",
+              "name": "correoBibliotecario",
+              "value": "tu-correo@example.com",
+              "type": "string"
+            },
+            {
+              "id": "42694b00-59d5-4710-aa31-69ff7e6ded43",
+              "name": "fallosParaAvisar",
+              "value": 2,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e81fb615-f447-4303-ad63-b7cd107e6c04",
+      "name": "Comprobar backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $('Configuración').first().json.urlSalud }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "79a73d9a-df39-4f26-a1fe-763c0110c04f",
+      "name": "¿Hay que avisar?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Decide si hay que avisar comparando el resultado con el de las comprobaciones anteriores\r\n// (datos estáticos del flujo; solo se guardan cuando el flujo está activado).\r\n//   - Avisa de la caída tras `fallosParaAvisar` comprobaciones fallidas seguidas (evita falsas alarmas).\r\n//   - Avisa una sola vez por caída y otra vez cuando el servidor vuelve a responder.\r\nconst cfg = $('Configuración').first().json;\r\nconst r = $input.first().json;\r\nconst memoria = $getWorkflowStaticData('global');\r\nmemoria.fallosSeguidos ??= 0;\r\n\r\n// --- Plantilla común de los correos (la misma en los tres flujos que envían correo) ----------\r\n// Colores de la web de la biblioteca. Todo va con estilos en línea y tablas: es lo único que\r\n// respetan por igual Gmail, Outlook y los clientes de móvil.\r\nconst COLOR = {\r\n  marca: '#4f46e5', marca2: '#7c3aed', marcaSuave: '#eef2ff',\r\n  texto: '#0f172a', suave: '#64748b', borde: '#e2e8f0', fondo: '#f1f5f9', tarjeta: '#ffffff', sutil: '#f8fafc',\r\n  peligro: '#dc2626', peligroSuave: '#fef2f2', peligroBorde: '#fecaca',\r\n  aviso: '#b45309', avisoSuave: '#fffbeb', avisoBorde: '#fde68a',\r\n  exito: '#047857', exitoSuave: '#ecfdf5', exitoBorde: '#a7f3d0',\r\n};\r\n// [texto, fondo, borde] de cada tono; ACENTO es el color vivo de las líneas laterales.\r\nconst ACENTO = { peligro: '#ef4444', aviso: '#f59e0b', exito: '#10b981', marca: COLOR.marca, neutro: '#94a3b8' };\r\nconst TONOS = {\r\n  peligro: [COLOR.peligro, COLOR.peligroSuave, COLOR.peligroBorde],\r\n  aviso: [COLOR.aviso, COLOR.avisoSuave, COLOR.avisoBorde],\r\n  exito: [COLOR.exito, COLOR.exitoSuave, COLOR.exitoBorde],\r\n  marca: [COLOR.marca, COLOR.marcaSuave, '#c7d2fe'],\r\n  neutro: [COLOR.suave, COLOR.sutil, COLOR.borde],\r\n};\r\nconst FUENTE = \"-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\";\r\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\r\n\r\n/** Etiqueta redondeada de estado («Vencido hace 6 días»). */\r\nconst pastilla = (texto, tono = 'neutro') => {\r\n  const [color, fondo, borde] = TONOS[tono];\r\n  return `<span style=\"display:inline-block;padding:3px 10px;border-radius:999px;background:${fondo};border:1px solid ${borde};color:${color};font-size:12px;font-weight:600;line-height:18px;white-space:nowrap\">${esc(texto)}</span>`;\r\n};\r\n\r\n/** Recuadro de color para mensajes importantes. */\r\nconst recuadro = (html, tono = 'marca', margen = '20px 0 0') => {\r\n  const [color, fondo, borde] = TONOS[tono];\r\n  return `<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin:${margen}\"><tr>\r\n<td style=\"background:${fondo};border:1px solid ${borde};border-left:4px solid ${ACENTO[tono]};border-radius:8px;padding:12px 16px;font-size:14px;line-height:21px;color:${COLOR.texto}\">${html}</td></tr></table>`;\r\n};\r\n\r\n/** Título de sección dentro del cuerpo, con contador opcional. */\r\nconst seccion = (titulo, cantidad) => `<h2 style=\"margin:28px 0 10px;font-size:15px;line-height:22px;font-weight:700;color:${COLOR.texto}\">${esc(titulo)}${\r\n  cantidad === undefined ? '' : ` <span style=\"display:inline-block;margin-left:4px;padding:0 8px;border-radius:999px;background:${COLOR.marcaSuave};color:${COLOR.marca};font-size:12px;line-height:20px;vertical-align:1px\">${cantidad}</span>`}</h2>`;\r\n\r\n/**\r\n * Documento completo del correo: cabecera con degradado, tarjeta blanca y pie.\r\n * @param o.etiqueta    texto pequeño sobre el título («RECORDATORIO»)\r\n * @param o.vistaPrevia texto que muestran los clientes de correo junto al asunto\r\n * @param o.cabecera    color de la cabecera: 'marca' (índigo), 'peligro' (rojo) o 'exito' (verde)\r\n */\r\nfunction correoHtml({ biblioteca, etiqueta, titulo, subtitulo = '', vistaPrevia = '', cuerpo, pie, cabecera = 'marca' }) {\r\n  const [desde, hasta, claro] = {\r\n    marca: [COLOR.marca, COLOR.marca2, '#c7d2fe'],\r\n    peligro: ['#dc2626', '#9f1239', '#fecaca'],\r\n    exito: ['#059669', '#0f766e', '#a7f3d0'],\r\n  }[cabecera];\r\n  return `<!doctype html>\r\n<html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\r\n<meta name=\"color-scheme\" content=\"light\"><meta name=\"supported-color-schemes\" content=\"light\"><title>${esc(titulo)}</title></head>\r\n<body style=\"margin:0;padding:0;background:${COLOR.fondo};-webkit-text-size-adjust:100%\">\r\n<div style=\"display:none;max-height:0;overflow:hidden;opacity:0;color:${COLOR.fondo}\">${esc(vistaPrevia)}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>\r\n<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"background:${COLOR.fondo}\"><tr><td align=\"center\" style=\"padding:24px 12px\">\r\n<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"max-width:600px;font-family:${FUENTE}\">\r\n<tr><td style=\"background:${desde};background-image:linear-gradient(135deg,${desde},${hasta});border-radius:14px 14px 0 0;padding:24px 28px\">\r\n  <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\"><tr>\r\n    <td style=\"width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.18);text-align:center;font-size:19px;line-height:36px\">📖</td>\r\n    <td style=\"padding-left:12px;font-size:15px;font-weight:700;color:#ffffff;letter-spacing:0.2px\">${esc(biblioteca)}</td>\r\n  </tr></table>\r\n  <div style=\"margin-top:20px;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${claro}\">${esc(etiqueta)}</div>\r\n  <div style=\"margin-top:4px;font-size:24px;line-height:31px;font-weight:700;color:#ffffff\">${esc(titulo)}</div>\r\n  ${subtitulo ? `<div style=\"margin-top:6px;font-size:14px;line-height:20px;color:#ffffff;opacity:0.9\">${esc(subtitulo)}</div>` : ''}\r\n</td></tr>\r\n<tr><td style=\"background:${COLOR.tarjeta};border:1px solid ${COLOR.borde};border-top:0;border-radius:0 0 14px 14px;padding:28px;font-size:15px;line-height:23px;color:${COLOR.texto}\">\r\n${cuerpo}\r\n</td></tr>\r\n<tr><td style=\"padding:18px 28px 0;text-align:center;font-size:12px;line-height:18px;color:${COLOR.suave}\">${pie}</td></tr>\r\n</table>\r\n</td></tr></table>\r\n</body></html>`;\r\n}\r\n// --- Fin de la plantilla común ----------------------------------------------------------------\r\n\r\nconst funciona = r.statusCode === 200 && r.body?.status === 'UP';\r\nconst ahora = $now;\r\nconst hora = (iso) => DateTime.fromISO(iso).setLocale('es').toFormat(\"dd/MM/yyyy 'a las' HH:mm\");\r\n\r\n/** Tabla de datos «etiqueta: valor» del aviso. */\r\nconst datos = (filas) => `<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin:20px 0 0;border-collapse:collapse\">\r\n${filas.map(([k, v]) => `<tr><td style=\"padding:9px 0;border-bottom:1px solid ${COLOR.borde};font-size:13px;color:${COLOR.suave};width:40%;vertical-align:top\">${k}</td>\r\n<td style=\"padding:9px 0;border-bottom:1px solid ${COLOR.borde};font-size:14px;color:${COLOR.texto};word-break:break-word\">${v}</td></tr>`).join('')}\r\n</table>`;\r\nconst enlace = (url) => `<a href=\"${esc(url)}\" style=\"color:${COLOR.marca};text-decoration:none\">${esc(url)}</a>`;\r\nconst pie = `Aviso automático de n8n. Se comprueba cada pocos minutos.`;\r\n\r\nif (funciona) {\r\n  const estabaAvisado = memoria.avisado;\r\n  const desde = memoria.caidoDesde;\r\n  memoria.fallosSeguidos = 0;\r\n  memoria.avisado = false;\r\n  memoria.caidoDesde = null;\r\n  if (!estabaAvisado) return [];\r\n  const minutos = Math.max(1, Math.round(ahora.diff(DateTime.fromISO(desde), 'minutes').minutes));\r\n  const duracion = minutos < 60\r\n    ? `${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}`\r\n    : `${Math.floor(minutos / 60)} h ${minutos % 60} min`;\r\n  const asunto = `${cfg.nombreBiblioteca}: el servidor vuelve a funcionar`;\r\n  return [{ json: {\r\n    asunto,\r\n    html: correoHtml({\r\n      biblioteca: cfg.nombreBiblioteca,\r\n      cabecera: 'exito',\r\n      etiqueta: 'Estado del servidor',\r\n      titulo: 'El servidor vuelve a funcionar',\r\n      subtitulo: `Estuvo sin servicio aproximadamente ${duracion}.`,\r\n      vistaPrevia: `El backend vuelve a responder tras ${duracion} sin servicio.`,\r\n      cuerpo: recuadro(`&#10003; El backend de <strong>${esc(cfg.nombreBiblioteca)}</strong> vuelve a responder con normalidad.`, 'exito', '0')\r\n        + datos([\r\n          ['Sin servicio desde', hora(desde)],\r\n          ['Recuperado', hora(ahora.toISO())],\r\n          ['Duración', `aproximadamente ${duracion}`],\r\n          ['Comprobación', enlace(cfg.urlSalud)],\r\n        ]),\r\n      pie,\r\n    }),\r\n    texto: `El backend de ${cfg.nombreBiblioteca} vuelve a responder (${hora(ahora.toISO())}).\\n`\r\n      + `Estuvo sin servicio aproximadamente ${duracion}, desde el ${hora(desde)}.\\n\\nComprobación: ${cfg.urlSalud}`,\r\n  } }];\r\n}\r\n\r\n// El servidor no responde o no está «UP».\r\nlet motivo;\r\nif (r.error) motivo = r.error.message ?? (typeof r.error === 'string' ? r.error : JSON.stringify(r.error));\r\nelse motivo = `respondió ${r.statusCode} con estado ${r.body?.status ?? JSON.stringify(r.body)}`;\r\n\r\nmemoria.fallosSeguidos += 1;\r\nmemoria.caidoDesde ??= ahora.toISO();\r\nif (memoria.avisado || memoria.fallosSeguidos < cfg.fallosParaAvisar) return [];\r\n\r\nmemoria.avisado = true;\r\nreturn [{ json: {\r\n  asunto: `${cfg.nombreBiblioteca}: el servidor no responde`,\r\n  html: correoHtml({\r\n    biblioteca: cfg.nombreBiblioteca,\r\n    cabecera: 'peligro',\r\n    etiqueta: 'Estado del servidor',\r\n    titulo: 'El servidor no responde',\r\n    subtitulo: `Desde el ${hora(memoria.caidoDesde)}.`,\r\n    vistaPrevia: `El backend no responde: ${motivo}`,\r\n    cuerpo: recuadro(`El backend de <strong>${esc(cfg.nombreBiblioteca)}</strong> no responde. Mientras tanto, la web no puede consultar ni registrar préstamos.`, 'peligro', '0')\r\n      + datos([\r\n        ['Sin servicio desde', hora(memoria.caidoDesde)],\r\n        ['Comprobaciones fallidas', String(memoria.fallosSeguidos)],\r\n        ['Motivo', `<code style=\"font-family:Consolas,Menlo,monospace;font-size:13px;background:${COLOR.sutil};padding:1px 4px;border-radius:4px\">${esc(motivo)}</code>`],\r\n        ['Comprobación', enlace(cfg.urlSalud)],\r\n      ])\r\n      + `<p style=\"margin:20px 0 0;font-size:14px;color:${COLOR.suave}\">Te avisaremos de nuevo cuando vuelva a funcionar.</p>`,\r\n    pie,\r\n  }),\r\n  texto: `El backend de ${cfg.nombreBiblioteca} no responde desde el ${hora(memoria.caidoDesde)} `\r\n    + `(${memoria.fallosSeguidos} comprobaciones fallidas seguidas).\\n\\n`\r\n    + `Motivo: ${motivo}\\nComprobación: ${cfg.urlSalud}\\n\\n`\r\n    + 'Te avisaremos de nuevo cuando vuelva a funcionar.',\r\n} }];\r\n"
+      }
+    },
+    {
+      "id": "fd83446a-3b9a-423c-a310-1e08e970fb13",
+      "name": "Enviar aviso",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        880,
+        300
+      ],
+      "webhookId": "8ee434c8-fd81-4a2a-a1c4-9c124afca265",
+      "credentials": {
+        "smtp": {
+          "id": "bibSmtpCorreo001",
+          "name": "SMTP Biblioteca"
+        }
+      },
+      "parameters": {
+        "fromEmail": "={{ $('Configuración').first().json.nombreBiblioteca }} <{{ $('Configuración').first().json.correoRemitente }}>",
+        "toEmail": "={{ $('Configuración').first().json.correoBibliotecario }}",
+        "subject": "={{ $json.asunto }}",
+        "emailFormat": "both",
+        "text": "={{ $json.texto }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada 5 minutos": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Comprobar backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comprobar backend": {
+      "main": [
+        [
+          {
+            "node": "¿Hay que avisar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay que avisar?": {
+      "main": [
+        [
+          {
+            "node": "Enviar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota",
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "tags": []
+}
