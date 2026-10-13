@@ -24,7 +24,7 @@ Este proyecto es **independiente** del [Sistema de Biblioteca](https://github.co
 6. [Importar libros desde CSV](#importar-libros-desde-csv)
 7. [Correo con Gmail](#correo-con-gmail)
 8. [Solución de problemas](#solución-de-problemas)
-9. [Estructura del proyecto](#estructura-del-proyecto)
+9. [Estructura del proyecto (MVC)](#estructura-del-proyecto-mvc)
 
 ---
 
@@ -225,21 +225,76 @@ Con Outlook u otros proveedores: `port` 587 y `secure` en `false` (STARTTLS).
 
 ---
 
-## Estructura del proyecto
+## Estructura del proyecto (MVC)
+
+El código de los nodos no se escribe dentro de n8n: vive en `src/`, organizado como **Modelo – Vista – Controlador**, y `npm run generar` lo convierte en los flujos de `workflows/`.
+
+| Capa | Carpeta | Qué contiene | Ejemplo |
+|---|---|---|---|
+| **Modelo** | `src/modelos/` | Reglas y acceso a datos, sin nada de presentación. Funciones puras que se prueban sin n8n. | Qué recordatorios toca enviar hoy, cuándo se considera caído el servidor, leer el CSV, llamar a la API de libros. |
+| **Vista** | `src/vistas/` | Cómo se presenta: correos HTML y texto, página de resultado. | `correo-recordatorio.js`, `correo-informe.js`, la plantilla común. |
+| **Controlador** | `src/controladores/` | Un archivo por cada nodo Code: lee los datos de n8n, llama al modelo y a la vista y devuelve los elementos de salida. | `recordatorios-preparar.js` = nodo «Preparar avisos». |
+| Flujos | `src/flujos/` | Qué nodos tiene cada flujo y cómo se conectan (disparadores, consultas HTTP, correo). | `recordatorios.js` |
+
+```mermaid
+flowchart LR
+    subgraph n8n["Flujo en n8n"]
+        T["Disparador"] --> H["Nodos HTTP<br/>(datos de la API)"] --> C["Nodo Code<br/>= controlador"] --> E["Enviar correo"]
+    end
+    C -- "usa" --> M["Modelo<br/>reglas y datos"]
+    C -- "usa" --> V["Vista<br/>HTML y texto"]
+```
 
 ```text
 biblioteca-n8n/
-├── workflows/                       # Flujos de n8n listos para importar
-│   ├── 1-recordatorios-prestamos.json
-│   ├── 2-informe-semanal.json
-│   ├── 3-importar-libros-csv.json
-│   └── 4-aviso-servidor-caido.json
+├── src/
+│   ├── modelos/
+│   │   ├── formato.js               # Fechas y textos («hace 6 días», «Del 7 al 13 de octubre»)
+│   │   ├── prestamos.js             # Qué recordatorios enviar y la memoria de avisos
+│   │   ├── informe.js               # Datos del informe semanal
+│   │   ├── salud.js                 # Estado del servidor entre comprobaciones
+│   │   ├── csv-libros.js            # Lectura y validación del CSV
+│   │   ├── api-libros.js            # Cliente de la API de libros y regla de duplicados
+│   │   └── importacion.js           # Proceso de importación fila a fila
+│   ├── vistas/
+│   │   ├── html.js                  # Escapado de HTML
+│   │   ├── plantilla-correo.js      # Cabecera, tarjeta, pie, etiquetas y recuadros
+│   │   ├── correo-recordatorio.js
+│   │   ├── correo-informe.js
+│   │   ├── correo-servidor.js       # Caída y recuperación
+│   │   └── pagina-importacion.js
+│   ├── controladores/               # Un archivo por nodo Code
+│   └── flujos/                      # Definición de los 4 flujos y piezas para construir nodos
 ├── scripts/
-│   └── preparar.mjs                 # Importa credencial y flujos con los valores de config.json
-├── ejemplos/
-│   └── libros.csv                   # CSV de ejemplo para el formulario
+│   ├── generar.mjs                  # src/ → workflows/*.json
+│   ├── empaquetar.mjs               # Junta un controlador con sus modelos y vistas en un nodo Code
+│   └── preparar.mjs                 # Importa la credencial y los flujos con los valores de config.json
+├── pruebas/                         # npm test (modelos, vistas, controladores y generación)
+├── workflows/                       # Flujos generados, listos para importar en n8n
+├── ejemplos/libros.csv              # CSV de ejemplo para el formulario
 ├── config.example.json              # Plantilla de configuración (copiar a config.json)
-└── package.json                     # n8n 2.35.7 y los comandos preparar / start
+└── package.json
 ```
+
+### Cambiar algo de los flujos
+
+1. Edita `src/`: por ejemplo, el texto de un correo en `src/vistas/` o una regla en `src/modelos/`.
+2. Comprueba que todo sigue bien:
+
+```bash
+npm test
+```
+
+3. Vuelve a generar los flujos y cárgalos en n8n (con n8n detenido):
+
+```bash
+npm run generar
+```
+
+```bash
+npm run preparar
+```
+
+Los nodos Code de n8n no admiten `import`, así que `generar` copia en cada nodo su controlador y los modelos y vistas que usa, en orden, y termina llamando al controlador con lo que ofrece n8n (`$`, `$input`, la fecha de hoy, la memoria del flujo y las funciones para leer archivos y hacer peticiones). Si cambias un nodo directamente en el editor de n8n, ese cambio se pierde la próxima vez que generes; para conservarlo, llévalo a `src/`. La prueba «workflows/ está al día» falla si se edita `src/` y se olvida regenerar.
 
 Los datos de n8n (cuenta, credenciales cifradas, ejecuciones) se guardan en `%USERPROFILE%\.n8n`, no en esta carpeta.
