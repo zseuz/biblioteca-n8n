@@ -1,0 +1,24 @@
+{
+  "nombreBiblioteca": "Biblioteca",
+  "zonaHoraria": "America/Bogota",
+  "api": "http://localhost:8080",
+  "correo": {
+    "remitente": "tu-cuenta@gmail.com",
+    "bibliotecario": "tu-cuenta@gmail.com",
+    "pruebas": "tu-cuenta@gmail.com"
+  },
+  "recordatorios": {
+    "diasAntesDeVencer": 3,
+    "repetirVencidosCadaDias": 7
+  },
+  "avisoCaida": {
+    "fallosParaAvisar": 2
+  },
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": 465,
+    "secure": true,
+    "user": "tu-cuenta@gmail.com",
+    "password": "contraseña-de-aplicación"
+  }
+}
