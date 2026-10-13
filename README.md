@@ -10,7 +10,7 @@
 
 </div>
 
-Este proyecto es **independiente** del [Sistema de Biblioteca](../biblioteca): no modifica su código ni su base de datos. Solo usa su **API REST** (`http://localhost:8080/api`) desde [n8n](https://n8n.io), igual que lo haría la web.
+Este proyecto es **independiente** del [Sistema de Biblioteca](https://github.com/zseuz/biblioteca): no modifica su código ni su base de datos. Solo usa su **API REST** (`http://localhost:8080/api`) desde [n8n](https://n8n.io), igual que lo haría la web.
 
 ---
 
@@ -67,7 +67,7 @@ flowchart LR
 | Necesitas | Para qué |
 |---|---|
 | **Node.js 22.22 o superior** | Ejecutar n8n. Se usa n8n **2.35.7** porque las versiones posteriores exigen Node 24; si actualizas Node, puedes subir la versión en `package.json`. |
-| **El backend de la biblioteca en marcha** | Los flujos leen y escriben a través de su API (en `../biblioteca/backend`: `.\mvnw.cmd spring-boot:run`). |
+| **El backend de la biblioteca en marcha** | Los flujos leen y escriben a través de su API. Clona [zseuz/biblioteca](https://github.com/zseuz/biblioteca) y, en su carpeta `backend`, ejecuta `.\mvnw.cmd spring-boot:run`. |
 | **Una cuenta de correo con SMTP** | Enviar los correos. Con Gmail hace falta una *contraseña de aplicación* ([ver abajo](#correo-con-gmail)). |
 
 ---
