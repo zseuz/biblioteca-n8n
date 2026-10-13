@@ -1,0 +1,16 @@
+{
+  "name": "biblioteca-n8n",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automatizaciones de n8n para el Sistema de Biblioteca: recordatorios de préstamos, informe semanal, importación de libros desde CSV y aviso si el servidor no responde.",
+  "engines": {
+    "node": ">=22.22"
+  },
+  "scripts": {
+    "preparar": "node scripts/preparar.mjs",
+    "start": "n8n start"
+  },
+  "dependencies": {
+    "n8n": "2.35.7"
+  }
+}

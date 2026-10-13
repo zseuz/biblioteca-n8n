@@ -1,0 +1,4 @@
+node_modules/
+# Tus datos y la contraseña del correo: no se suben a Git.
+config.json
+*.log
